@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>K-Driving-Sim | 한국형 드라이빙 시뮬레이터</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      overflow: hidden;
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      background: #000;
+    }
+
+    #renderCanvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      touch-action: none;
+    }
+
+    /* HUD 오버레이 */
+    .hud {
+      position: fixed;
+      pointer-events: none;
+      color: white;
+      text-shadow: 0 0 10px rgba(0,0,0,0.8);
+    }
+
+    /* 속도계 (좌측 하단) */
+    .speedometer {
+      bottom: 30px;
+      left: 30px;
+      text-align: center;
+    }
+
+    .speedometer .speed {
+      font-size: 72px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .speedometer .unit {
+      font-size: 18px;
+      opacity: 0.7;
+    }
+
+    /* 타코미터 & 기어 (우측 하단) */
+    .tachometer {
+      bottom: 30px;
+      right: 30px;
+      text-align: center;
+    }
+
+    .tachometer .rpm {
+      font-size: 36px;
+      font-weight: 600;
+    }
+
+    .tachometer .gear {
+      font-size: 48px;
+      font-weight: 700;
+      color: #00ff88;
+    }
+
+    /* 정보 패널 (상단) */
+    .info-panel {
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 30px;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px 25px;
+      border-radius: 10px;
+    }
+
+    .info-panel .item {
+      text-align: center;
+    }
+
+    .info-panel .label {
+      font-size: 11px;
+      opacity: 0.6;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .info-panel .value {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    /* 조작 도움말 (좌측 상단) */
+    .controls-help {
+      top: 20px;
+      left: 20px;
+      font-size: 12px;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 15px;
+      border-radius: 8px;
+      opacity: 0.8;
+      transition: opacity 0.3s;
+    }
+
+    .controls-help:hover {
+      opacity: 1;
+    }
+
+    .controls-help h4 {
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .controls-help .key {
+      display: inline-block;
+      background: rgba(255,255,255,0.2);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+      margin-right: 5px;
+    }
+
+    /* 로딩 화면 */
+    .loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      z-index: 1000;
+      transition: opacity 0.5s;
+    }
+
+    .loading.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loading h1 {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+
+    .loading p {
+      opacity: 0.7;
+      margin-bottom: 30px;
+    }
+
+    .loading .spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid rgba(255,255,255,0.2);
+      border-top-color: #00ff88;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* 미니맵 (우측 상단) */
+    .minimap {
+      top: 20px;
+      right: 20px;
+      width: 200px;
+      height: 200px;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 10px;
+      border: 2px solid rgba(255,255,255,0.2);
+    }
+  </style>
+</head>
+<body>
+  <!-- 로딩 화면 -->
+  <div class="loading" id="loading">
+    <h1>🚗 K-Driving-Sim</h1>
+    <p>한국형 드라이빙 시뮬레이터</p>
+    <div class="spinner"></div>
+  </div>
+
+  <!-- 3D 렌더링 캔버스 -->
+  <canvas id="renderCanvas"></canvas>
+
+  <!-- HUD 요소들 -->
+  <div class="hud speedometer">
+    <div class="speed" id="speedometer">0</div>
+    <div class="unit">km/h</div>
+  </div>
+
+  <div class="hud tachometer">
+    <div class="rpm" id="tachometer">800 RPM</div>
+    <div class="gear">D<span id="gear">1</span></div>
+  </div>
+
+  <div class="hud info-panel">
+    <div class="item">
+      <div class="label">차량</div>
+      <div class="value" id="vehicle-info">현대 쏘나타</div>
+    </div>
+    <div class="item">
+      <div class="label">위치</div>
+      <div class="value" id="map-info">📍 강남역</div>
+    </div>
+    <div class="item">
+      <div class="label">카메라</div>
+      <div class="value" id="camera-mode">추적</div>
+    </div>
+  </div>
+
+  <div class="hud controls-help">
+    <h4>조작법</h4>
+    <div><span class="key">W</span><span class="key">↑</span> 가속</div>
+    <div><span class="key">S</span><span class="key">↓</span> 브레이크</div>
+    <div><span class="key">A</span><span class="key">D</span> 조향</div>
+    <div><span class="key">Space</span> 핸드브레이크</div>
+    <div><span class="key">1</span>~<span class="key">4</span> 카메라</div>
+    <div><span class="key">R</span> 리셋</div>
+  </div>
+
+  <div class="hud minimap" id="minimap">
+    <!-- 미니맵 캔버스 (나중에 구현) -->
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+  <script>
+    // 로딩 완료 후 로딩 화면 숨기기
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        document.getElementById('loading').classList.add('hidden');
+      }, 1500);
+    });
+  </script>
+</body>
+</html>
