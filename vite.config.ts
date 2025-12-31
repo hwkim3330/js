@@ -8,8 +8,8 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
-    sourcemap: true,
-    outDir: 'dist',
+    sourcemap: false,  // 용량 줄이기
+    outDir: 'docs',    // GitHub Pages용
     assetsDir: 'assets'
   },
   optimizeDeps: {
